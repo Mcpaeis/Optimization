@@ -1,0 +1,245 @@
+---
+title: "Test-Implementation-05-31-2021"
+author: "Sixtus Dakurah"
+date: "5/31/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+
+Define the variables:
+
+$B:$ Total amount available for disbursement.
+
+$S_i, \hspace{0.25cm} i = 1, 2, ..., s:$ Denote segment $i$ with a total of $s$ segments.
+
+$L:$ Loan amount.
+
+$P:$ The price variable.
+
+
+Step 1: Fit the logistic model for a given segment. Here the segment indexes will be omitted and all variables will be assumed to pertain to a single segment.
+
+The design matrix is of the form:
+
+$X= \left[j, X_{1}, X_2, X_3\right]$ where $X_{l} = [x_{1,l}, ..., X_{m, l}]^\prime$ $l=1:$ Segment, $l =2:$ Price, $l=3:$ Loan Amount.
+
+The model for predicting the probability of booking is of the form:
+
+\begin{equation}
+  \pi{(X, \beta)}= \left[ \sigma(z_i), ..., \sigma(z_m) \right]^\prime
+\end{equation}
+
+Where $\sigma(z_k) = \left[ 1 + exp\{-z_k\} \right]^{-1}$ and $z_k = X_{k}\beta$, $k=1, ..., m$ the number of examples.
+
+An expressive form for $X_k\beta = \beta_0 + \beta_1x_{k, 1} + \beta_{2}x_{k, 2} + \beta_{3}x_{k, 3} + \beta_{1, 2}x_{k, 1}*x_{k, 2} + \beta_{1, 3}x_{k, 1}*x_{k, 3}$
+
+
+We now simulate some data:
+
+```{r}
+set.seed(111)
+# set the number of examples and segments
+m <- 300; m1 <- 100; m2<-100; m3 <- 100; s <- 3
+# create the segment groups
+x1 <- c(rep('s1', m1), rep('s2', m2), rep('s3', m3))
+# generate the prices
+x2 <- c( 
+  rlnorm(m1, meanlog = 1, sdlog = 1),
+  rlnorm(m2, meanlog = 3, sdlog = 1),
+  rlnorm(m3, meanlog = 5, sdlog = 1)
+  )
+# generate the loan amount
+x3 <- c( 
+  rep(rlnorm(1, meanlog = 11, sdlog = 5), m1),
+  rep(rlnorm(1, meanlog = 3, sdlog = 3), m2),
+  rep(rlnorm(1, meanlog = 15, sdlog = 7), m3)
+  )
+# generate the prob
+prob.level1 <- function(val){ 
+  ifelse(val < quantile(x2[1:m1], 0.25), runif(1, 0.4, 1), runif(1, 0, 1)) }
+prob.level2 <- function(val){ 
+  ifelse(val < quantile(x2[(m1+1):(m1+m2)], 0.25), runif(1, 0.4, 01), runif(1, 0, 1)) }
+prob.level3 <- function(val){ 
+  ifelse(val < quantile(x2[(m1+m2+1):m], 0.25), runif(1, 0.4, 01), runif(1, 0, 1)) }
+probs <- c(
+  
+  do.call(rbind, lapply(x2[1:m1], prob.level1)),
+  do.call(rbind, lapply(x2[(m1+1):(m1+m2)], prob.level2)),
+  do.call(rbind, lapply(x2[(m1+m2+1):m], prob.level3))
+  
+)
+data.sim <- data.frame(x1, x2, x3, probs, 
+                       y = as.factor(ifelse(probs > 0.5, 's', 'f')))
+# the price can not be more than the loan amount
+data.sim <- data.sim %>% mutate(price = ifelse(x2 > x3, 10*x3, x3))
+
+head(data.sim)
+```
+
+```{r}
+summary(data.sim)
+```
+
+
+We now build a logistic model using the data from segment 1
+
+
+```{r}
+data.segment1 <- data.sim %>% filter(x1 == 's1')
+#glm.segment1.fit <- glm(y~x1 + x2 + x3 + I(x1*x2) + 
+#I(x1*x3), data = data.segment1, family = binomial)
+glm.segment1.fit <- glm(y~x2, data = data.segment1, family = binomial)
+summary(glm.segment1.fit)
+```
+
+
+The fitted model has the form:
+
+$\hat{\sigma}(z_k) = \left[ 1 + exp\{ 0.38749 - 0.03121x_{k,2}\} \right]^{-1}$
+
+$\pi(x_2, \hat{\beta}) = \left[ \hat{\sigma}(z_1), ..., \hat{\sigma}(z_k) \right]^\prime$
+
+```{r}
+# get the predictions
+segment1.pred.probs <- predict(glm.segment1.fit, type = "response")
+data.segment1 <- data.segment1 %>% 
+  mutate(pred.probs = segment1.pred.probs, 
+         pred.y = as.factor(ifelse(pred.probs > 0.5, 's', 'f')))
+head(data.segment1)
+```
+
+```{r}
+table(data.segment1$pred.y, data.segment1$y)
+```
+
+
+
+Step 2: We now optimize over the price variable.
+
+```{r}
+# Compute the total amount available for disbursement
+(B <- sum(data.sim$x3))
+```
+
+Denote the profit as:
+
+$\rho(x_2, x_4) = x_2 - x_4$ where the new variable $x_4$ is the cost of booking.
+
+The expected profit is then given as:
+
+\begin{equation}
+  E\left[\rho(x_2, x_4)|x_{\{1, i\}},x_2\right] = \sum_{k=1}^{m_i} \pi(x_{\{k,2\}}, \hat{\beta})\rho(x_{\{k,2\}}, x_{\{k,4\}})
+\end{equation}
+
+We also have the expected loan amount of the form:
+
+
+\begin{equation}
+  E\left[x_3|x_{\{1, i\}},x_2\right] = \sum_{k=1}^{m_i} \pi(x_{\{k,2\}}, \hat{\beta})*x_{k, 3}
+\end{equation}
+
+Where  $\pi(x_{\{k,2\}}, \hat{\beta})$ is assumed to be constructed for segment $i$.
+
+
+The optimization problem is now of the form:
+
+\begin{equation}
+  argmin_{x_2}  E\left[\rho(x_2, x_4)|x_{\{1, i\}},x_2\right] \hspace{1cm} s.t. \hspace{0.5cm} \sum_{i=1}^{s} E\left[x_3|x_{\{1, i\}},x_2\right] < B
+\end{equation}
+
+
+The lagrangian is of the form:
+
+\begin{equation}
+  F(x_{k, 2}, \lambda) =   E\left[\rho(x_2, x_4)|x_{\{1, i\}},x_2\right] - \lambda\left[ \sum_{i=1}^{s} E\left[x_3|x_{\{1, i\}},x_2\right] - B \right]
+\end{equation}
+
+Here the variable $x_{k, 2}$ and $x_2$ will be used interchangeably, where the latter is preferred used and will be assumed to not depend (???) on $k$ in both (2) and (3), otherwise it will be impossible to get Newton's update rules.
+
+For simplicity let:
+
+$f(x_{k, 2}) =  E\left[\rho(x_2, x_4)|x_{\{1, i\}},x_2\right]$ and $c(x_{k, 2}) = \sum_{i=1}^{s} E\left[x_3|x_{\{1, i\}},x_2\right] - B$
+
+
+Using newtons method, we have the following derivations:
+
+
+Opt 1: Quadratic Taylor series expansion
+
+
+\begin{equation}
+  F(x_{k, 2}, \lambda) \approx  F(x_{k, 2}^o, \lambda^o) + 
+  (x_{k, 2} - x_{k, 2}^o) \left.\frac{\partial F}{\partial x_{k, 2}}\right\vert_0 + 
+  (\lambda - \lambda^o) \left. \frac{\partial c}{\partial \lambda}\right\vert_0 + 
+  \frac{1}{2}(x_{k, 2} - x_{k, 2}^o)^2 \left.\frac{\partial^2 F}{\partial x_{k, 2}^2}\right\vert_0 + 
+  (x_{k, 2} - x_{k, 2}^o)*(\lambda - \lambda^o) \left.\frac{\partial^2 F}{\partial x_{k, 2} \partial \lambda }\right\vert_0
+\end{equation}
+
+
+Opt 2: Inserting (5) into (6), we have
+
+\begin{equation}
+  \begin{split}
+  F(x_{k, 2}, \lambda) \approx  F(x_{k, 2}^o, \lambda^o) + 
+  (x_{k, 2} - x_{k, 2}^o)\left\{ \left.\frac{\partial f}{\partial x_{k, 2}}\right\vert_0 - \lambda^o \left.\frac{\partial c}{\partial x_{k, 2}}\right\vert_0  \right\} - 
+  (\lambda - \lambda^o) c(x_{k, 2}^o) + \\
+  \frac{1}{2}(x_{k, 2} - x_{k, 2}^o)^2\left\{ \left.\frac{\partial^2 f}{\partial x_{k, 2}^2}\right\vert_0 - \lambda \left.\frac{\partial^2 c}{\partial x_{2, k}^2}\right\vert_0  \right\} - 
+  (x_{k, 2} - x_{k, 2}^o)*(\lambda - \lambda^o) \left.\frac{\partial c}{\partial x_{k, 2} \partial \lambda }\right\vert_0
+  \end{split}
+\end{equation}
+
+
+Opt 3: The maximum at $x_{k, 2}$ is achieved when 
+
+
+\begin{equation}
+  \begin{split}
+    \frac{\partial F}{\partial x_{k, 2}} = \left.\frac{\partial f}{\partial x_{k, 2}}\right\vert_0 + (x_{k, 2} - x_{k, 2}^o)\left\{ \left.\frac{\partial^2 f}{\partial x_{k, 2}^2}\right\vert_0 \right\} - \lambda \left.\frac{\partial c}{\partial x_{k, 2} \partial \lambda }\right\vert_0 = 0
+  \end{split}
+\end{equation}
+
+
+Opt 3: We now derive the gradient update rules
+
+We can easily see that:
+
+\begin{equation}
+  \begin{split}
+    \Delta x_{k, 2} = \frac{ \left\{ \lambda \left.\frac{\partial c}{\partial x_{k, 2} \partial \lambda }\right\vert_0 - \left.\frac{\partial f}{\partial x_{k, 2}}\right\vert_0 \right\} }{\left\{ \left.\frac{\partial^2 f}{\partial x_{k, 2}^2}\right\vert_0 \right\}}
+  \end{split}
+\end{equation}
+
+
+
+Similarly for a first order expansion of the constraints, we have the following new value of $\lambda$
+
+
+\begin{equation}
+  \begin{split}
+    c(x_{k, 2} ) = c(x_{k, 2}^o) +  \Delta x_{k, 2}\left.\frac{\partial c}{\partial x_{k, 2} }\right\vert_{x_{k, 2}^o} = 0
+  \end{split}
+\end{equation}
+
+
+If we put (9) into (10), we can solve for $\lambda$ as follows:
+
+\begin{equation}
+  \begin{split}
+    \lambda = \frac{\left\{ \lambda \left.\frac{\partial c}{\partial x_{k, 2} \partial \lambda }\right\vert_0 \right\} * \left\{ \left.\frac{\partial f}{\partial x_{k, 2}}\right\vert_0 \right\}  }{\left\{ \left.\frac{\partial c}{\partial x_{k, 2}}\right\vert_0 \right\}^2} - 
+    \frac{\left\{ \left.\frac{\partial^2 f}{\partial x_{k, 2}^2}\right\vert_0 \right\} * c(x_{k, 2}^o) }{\left\{ \left.\frac{\partial c}{\partial x_{k, 2}}\right\vert_0 \right\}^2}
+  \end{split}
+\end{equation}
+
+Putting this into (10) will give final update rule.
+
+
+
+
+
+
