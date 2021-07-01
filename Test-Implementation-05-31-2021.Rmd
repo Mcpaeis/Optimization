@@ -22,12 +22,14 @@ $L:$ Loan amount.
 
 $P:$ The price variable.
 
-
+\hrule
 Step 1: Fit the logistic model for a given segment. Here the segment indexes will be omitted and all variables will be assumed to pertain to a single segment.
+\vspace{0.2cm}
+\hrule
 
 The design matrix is of the form:
 
-$X= \left[j, X_{1}, X_2, X_3\right]$ where $X_{l} = [x_{1,l}, ..., X_{m, l}]^\prime$ $l=1:$ Segment, $l =2:$ Price, $l=3:$ Loan Amount.
+$X= \left[j, x_{1}, x_2, x_3\right]$ where $x_{l} = [x_{1,l}, ..., x_{m, l}]^\prime$; $l=1:$ Segment, $l =2:$ Price, $l=3:$ Loan Amount.
 
 The model for predicting the probability of booking is of the form:
 
@@ -35,9 +37,9 @@ The model for predicting the probability of booking is of the form:
   \pi{(X, \beta)}= \left[ \sigma(z_i), ..., \sigma(z_m) \right]^\prime
 \end{equation}
 
-Where $\sigma(z_k) = \left[ 1 + exp\{-z_k\} \right]^{-1}$ and $z_k = X_{k}\beta$, $k=1, ..., m$ the number of examples.
+Where $\sigma(z_k) = \left[ 1 + exp\{-z_k\} \right]^{-1}$ and $z_k = x_{k}\beta$, $k=1, ..., m$ the number of examples.
 
-An expressive form for $X_k\beta = \beta_0 + \beta_1x_{k, 1} + \beta_{2}x_{k, 2} + \beta_{3}x_{k, 3} + \beta_{1, 2}x_{k, 1}*x_{k, 2} + \beta_{1, 3}x_{k, 1}*x_{k, 3}$
+An expressive form for $x_k\beta = \beta_0 + \beta_1x_{k, 1} + \beta_{2}x_{k, 2} + \beta_{3}x_{k, 3} + \beta_{1, 2}x_{k, 1}*x_{k, 2} + \beta_{1, 3}x_{k, 1}*x_{k, 3}$
 
 
 We now simulate some data:
@@ -74,10 +76,10 @@ probs <- c(
   do.call(rbind, lapply(x2[(m1+m2+1):m], prob.level3))
   
 )
-data.sim <- data.frame(x1, x2, x3, probs, 
+data.sim <- data.frame(x1 = as.factor(x1), x2, x3, probs, 
                        y = as.factor(ifelse(probs > 0.5, 's', 'f')))
 # the price can not be more than the loan amount
-data.sim <- data.sim %>% mutate(price = ifelse(x2 > x3, 10*x3, x3))
+data.sim <- data.sim %>% mutate(x3 = ifelse(x2 > x3, 10*x3, x3))
 
 head(data.sim)
 ```
@@ -94,37 +96,51 @@ We now build a logistic model using the data from segment 1
 data.segment1 <- data.sim %>% filter(x1 == 's1')
 #glm.segment1.fit <- glm(y~x1 + x2 + x3 + I(x1*x2) + 
 #I(x1*x3), data = data.segment1, family = binomial)
-glm.segment1.fit <- glm(y~x2, data = data.segment1, family = binomial)
+glm.segment1.fit <- glm(y~x1 + x2, data = data.sim, family = binomial)
 summary(glm.segment1.fit)
 ```
+Extract the coefficients:
+
+```{r}
+seg1.intercept <- ((glm.segment1.fit)$coefficients)[[1]]
+coef2 <- ((glm.segment1.fit)$coefficients)[[2]]
+coef3 <- ((glm.segment1.fit)$coefficients)[[3]]
+seg2.intercept <- seg1.intercept +  ((glm.segment1.fit)$coefficients)[[2]]
+seg3.intercept <- seg1.intercept +  ((glm.segment1.fit)$coefficients)[[3]]
+price.coef <- ((glm.segment1.fit)$coefficients)[[4]]
+```
+
 
 
 The fitted model has the form:
 
-$\hat{\sigma}(z_k) = \left[ 1 + exp\{ 0.38749 - 0.03121x_{k,2}\} \right]^{-1}$
+$\hat{\sigma}(z_k) = \left[ 1 + exp\{ - {z}_k \} \right]^{-1}$ \textcolor{red}{This will now be different}
 
 $\pi(x_2, \hat{\beta}) = \left[ \hat{\sigma}(z_1), ..., \hat{\sigma}(z_k) \right]^\prime$
 
 ```{r}
 # get the predictions
 segment1.pred.probs <- predict(glm.segment1.fit, type = "response")
-data.segment1 <- data.segment1 %>% 
+data.sim <- data.sim %>% 
   mutate(pred.probs = segment1.pred.probs, 
          pred.y = as.factor(ifelse(pred.probs > 0.5, 's', 'f')))
-head(data.segment1)
+head(data.sim)
 ```
 
 ```{r}
-table(data.segment1$pred.y, data.segment1$y)
+table(data.sim$pred.y, data.sim$y)
 ```
 
 
-
+\hrule
 Step 2: We now optimize over the price variable.
+\vspace{0.2cm}
+\hrule
 
 ```{r}
 # Compute the total amount available for disbursement
 (B <- sum(data.sim$x3))
+B <- 00
 ```
 
 Denote the profit as:
@@ -134,109 +150,580 @@ $\rho(x_2, x_4) = x_2 - x_4$ where the new variable $x_4$ is the cost of booking
 The expected profit is then given as:
 
 \begin{equation}
-  E\left[\rho(x_2, x_4)|x_{\{1, i\}},x_2\right] = \sum_{k=1}^{m_i} \pi(x_{\{k,2\}}, \hat{\beta})\rho(x_{\{k,2\}}, x_{\{k,4\}})
+  E\left[\rho(x_2, x_4)|x_{\{1, i\}},x_2\right] = \sum_{k=1}^{m_i} \pi_i(x_{\{k,2\}}, \hat{\beta})\rho(x_{\{k,2\}}, x_{\{k,4\}})
 \end{equation}
 
 We also have the expected loan amount of the form:
 
 
 \begin{equation}
-  E\left[x_3|x_{\{1, i\}},x_2\right] = \sum_{k=1}^{m_i} \pi(x_{\{k,2\}}, \hat{\beta})*x_{k, 3}
+  E\left[x_3|x_{\{1, i\}},x_2\right] = \sum_{k=1}^{m_i} \pi_i(x_{\{k,2\}}, \hat{\beta})*x_{k, 3}
 \end{equation}
 
-Where  $\pi(x_{\{k,2\}}, \hat{\beta})$ is assumed to be constructed for segment $i$.
+Where  $\pi_i(x_{\{k,2\}}, \hat{\beta})$ is assumed to be constructed for segment $i$.
 
 
-The optimization problem is now of the form:
+**The optimization problem is now of the form:**
 
 \begin{equation}
   argmin_{x_2}  E\left[\rho(x_2, x_4)|x_{\{1, i\}},x_2\right] \hspace{1cm} s.t. \hspace{0.5cm} \sum_{i=1}^{s} E\left[x_3|x_{\{1, i\}},x_2\right] < B
 \end{equation}
 
+\hrule
 
-The lagrangian is of the form:
+\textcolor{red}{This optimization problem is not well-defined and a solution can not be obtained if we employ single-variable optimization.} 
+
+This will be feasible if we resort to vector-valued optimization in which case the $\{k\}$ in $(2)$ and $(3)$ will be mute.
+But that too will not be useful in this context as we're not looking to optimize for all known price points.
+\vspace{0.2cm}
+\hrule
+
+**A modification that will make optimization feasible**
+
+Let $\rho(x_{\{k, 2\}}, x_{\{k, 4\}}) =x_{\{k, 2\}} - x_{\{k, 4\}}$ be the profit for a randomly chosen price point in a given segment i.
+
+The expected profit is now given as:
 
 \begin{equation}
-  F(x_{k, 2}, \lambda) =   E\left[\rho(x_2, x_4)|x_{\{1, i\}},x_2\right] - \lambda\left[ \sum_{i=1}^{s} E\left[x_3|x_{\{1, i\}},x_2\right] - B \right]
+  E\left[\rho(x_{\{k, 2\}}, x_{\{k, 4\}})|x_{\{k_i, 1\}},x_{\{k, 2\}}\right] = \pi_i(x_{\{k,2\}}, \hat{\beta})\rho(x_{\{k,2\}}, x_{\{k,4\}})
 \end{equation}
 
-Here the variable $x_{k, 2}$ and $x_2$ will be used interchangeably, where the latter is preferred used and will be assumed to not depend (???) on $k$ in both (2) and (3), otherwise it will be impossible to get Newton's update rules.
-
-For simplicity let:
-
-$f(x_{k, 2}) =  E\left[\rho(x_2, x_4)|x_{\{1, i\}},x_2\right]$ and $c(x_{k, 2}) = \sum_{i=1}^{s} E\left[x_3|x_{\{1, i\}},x_2\right] - B$
-
-
-Using newtons method, we have the following derivations:
-
-
-Opt 1: Quadratic Taylor series expansion
+We also have the expected loan amount of the form:
 
 
 \begin{equation}
+  E\left[x_{\{k, 3\}}|x_{\{k_i, 1\}},x_{\{k, 2\}}\right] = \pi_i(x_{\{k,2\}}, \hat{\beta})*x_{k, 3}
+\end{equation}
+
+**We now have the optimization problem:**
+
+\begin{equation}
+  argmin_{x_{\{k,2\}}}  E\left[\rho(x_{\{k,2\}}, x_{\{k,4\}})|x_{\{k_i, 1\}},x_{\{k, 2\}}\right] \hspace{1cm} s.t. \hspace{0.5cm} \sum_{i=1}^{s} E\left[x_{\{k, 3\}}|x_{\{k_i, 1\}},x_{\{k, 2\}}\right]  < B
+\end{equation}
+
+\textcolor{red}{We note that **B** used here does not make the constraint global.} Maybe it's possible to workout a constraint that makes the $B$ have global properties?
+
+
+The Lagrangian is of the form:
+
+\begin{equation}
+\label{eqn:langrangian}
+  F(x_{k, 2}, \lambda) =   E\left[\rho(x_{\{k,2\}}, x_{\{k,4\}})|x_{\{k_i, 1\}},x_{\{k, 2\}}\right] - \lambda\left[ \sum_{i=1}^{s} E\left[x_{\{k, 3\}}|x_{\{k_i, 1\}},x_{\{k, 2\}}\right]  - B \right]
+\end{equation}
+
+
+For ease of manipulation let:
+
+$f(x_{k, 2}) =   E\left[\rho(x_{\{k,2\}}, x_{\{k,4\}})|x_{\{k_i, 1\}},x_{\{k, 2\}}\right]$ and $c(x_{k, 2}) = \sum_{i=1}^{s} E\left[x_{\{k, 3\}}|x_{\{k_i, 1\}},x_{\{k, 2\}}\right]  - B$
+
+
+Using Newton's method, we have the following derivations:
+
+
+Opt 1: Quadratic Taylor series expansion for some chosen starting values $x_{k, 2}^o, \lambda^o$:
+
+
+\begin{equation}
+\label{eqn:quad-taylor-series}
   F(x_{k, 2}, \lambda) \approx  F(x_{k, 2}^o, \lambda^o) + 
   (x_{k, 2} - x_{k, 2}^o) \left.\frac{\partial F}{\partial x_{k, 2}}\right\vert_0 + 
-  (\lambda - \lambda^o) \left. \frac{\partial c}{\partial \lambda}\right\vert_0 + 
+  (\lambda - \lambda^o) \left. \frac{\partial F}{\partial \lambda}\right\vert_0 + 
   \frac{1}{2}(x_{k, 2} - x_{k, 2}^o)^2 \left.\frac{\partial^2 F}{\partial x_{k, 2}^2}\right\vert_0 + 
   (x_{k, 2} - x_{k, 2}^o)*(\lambda - \lambda^o) \left.\frac{\partial^2 F}{\partial x_{k, 2} \partial \lambda }\right\vert_0
 \end{equation}
 
 
-Opt 2: Inserting (5) into (6), we have
+Opt 2: Inserting (\ref{eqn:langrangian}) into (\ref{eqn:quad-taylor-series}), we have:
 
 \begin{equation}
+\label{eqn:quaratic-taylor-series-expansion}
   \begin{split}
   F(x_{k, 2}, \lambda) \approx  F(x_{k, 2}^o, \lambda^o) + 
   (x_{k, 2} - x_{k, 2}^o)\left\{ \left.\frac{\partial f}{\partial x_{k, 2}}\right\vert_0 - \lambda^o \left.\frac{\partial c}{\partial x_{k, 2}}\right\vert_0  \right\} - 
   (\lambda - \lambda^o) c(x_{k, 2}^o) + \\
   \frac{1}{2}(x_{k, 2} - x_{k, 2}^o)^2\left\{ \left.\frac{\partial^2 f}{\partial x_{k, 2}^2}\right\vert_0 - \lambda \left.\frac{\partial^2 c}{\partial x_{2, k}^2}\right\vert_0  \right\} - 
-  (x_{k, 2} - x_{k, 2}^o)*(\lambda - \lambda^o) \left.\frac{\partial c}{\partial x_{k, 2} \partial \lambda }\right\vert_0
+  (x_{k, 2} - x_{k, 2}^o)*(\lambda - \lambda^o) \left.\frac{\partial c}{\partial x_{k, 2}}\right\vert_0
   \end{split}
 \end{equation}
 
+Note: the last part, the derivative is w.r.t. only the $x_{k, 2}$, as that of $\lambda$ goes to 1.
 
-Opt 3: The maximum at $x_{k, 2}$ is achieved when 
+Opt 3: That the maximum is achieved at $x_{k, 2}$  requires the necessary condition:
 
 
 \begin{equation}
+\label{eqn:optcond}
   \begin{split}
-    \frac{\partial F}{\partial x_{k, 2}} = \left.\frac{\partial f}{\partial x_{k, 2}}\right\vert_0 + (x_{k, 2} - x_{k, 2}^o)\left\{ \left.\frac{\partial^2 f}{\partial x_{k, 2}^2}\right\vert_0 \right\} - \lambda \left.\frac{\partial c}{\partial x_{k, 2} \partial \lambda }\right\vert_0 = 0
+    \frac{\partial F}{\partial x_{k, 2}} = \left.\frac{\partial f}{\partial x_{k, 2}}\right\vert_0 + (x_{k, 2} - x_{k, 2}^o)\left\{ \left.\frac{\partial^2 f}{\partial x_{k, 2}^2}\right\vert_0 - \lambda \left.\frac{\partial^2 c}{\partial x_{2, k}^2}\right\vert_0 \right\} - \lambda \left.\frac{\partial c}{\partial x_{k, 2}}\right\vert_0 = 0
   \end{split}
 \end{equation}
 
 
-Opt 3: We now derive the gradient update rules
+Opt 4: We now derive the gradient update rules
 
 We can easily see that:
 
 \begin{equation}
+\label{eqn:xgradient}
   \begin{split}
-    \Delta x_{k, 2} = \frac{ \left\{ \lambda \left.\frac{\partial c}{\partial x_{k, 2} \partial \lambda }\right\vert_0 - \left.\frac{\partial f}{\partial x_{k, 2}}\right\vert_0 \right\} }{\left\{ \left.\frac{\partial^2 f}{\partial x_{k, 2}^2}\right\vert_0 \right\}}
+    \Delta x_{k, 2} = \frac{ \left\{ \lambda \left.\frac{\partial c}{\partial x_{k, 2}}\right\vert_0 - \left.\frac{\partial f}{\partial x_{k, 2}}\right\vert_0 \right\} }{\left\{ \left.\frac{\partial^2 f}{\partial x_{k, 2}^2}\right\vert_0 - \lambda \left.\frac{\partial^2 c}{\partial x_{2, k}^2}\right\vert_0 \right\} }
   \end{split}
 \end{equation}
 
 
 
-Similarly for a first order expansion of the constraints, we have the following new value of $\lambda$
+Similarly for a first order expansion of the constraints, we can solve a new value of $\lambda$ as follows:
 
 
 \begin{equation}
+\label{eqn:cgradient}
   \begin{split}
     c(x_{k, 2} ) = c(x_{k, 2}^o) +  \Delta x_{k, 2}\left.\frac{\partial c}{\partial x_{k, 2} }\right\vert_{x_{k, 2}^o} = 0
   \end{split}
 \end{equation}
 
 
-If we put (9) into (10), we can solve for $\lambda$ as follows:
+If we put (\ref{eqn:xgradient}) into (\ref{eqn:cgradient}), we have the following value of $\lambda$:
 
 \begin{equation}
+\label{eqn:lambdagradient}
   \begin{split}
-    \lambda = \frac{\left\{ \lambda \left.\frac{\partial c}{\partial x_{k, 2} \partial \lambda }\right\vert_0 \right\} * \left\{ \left.\frac{\partial f}{\partial x_{k, 2}}\right\vert_0 \right\}  }{\left\{ \left.\frac{\partial c}{\partial x_{k, 2}}\right\vert_0 \right\}^2} - 
-    \frac{\left\{ \left.\frac{\partial^2 f}{\partial x_{k, 2}^2}\right\vert_0 \right\} * c(x_{k, 2}^o) }{\left\{ \left.\frac{\partial c}{\partial x_{k, 2}}\right\vert_0 \right\}^2}
+    \lambda = \frac{\left\{ \left.\frac{\partial f}{\partial x_{k, 2}}\right\vert_0 \right\}  }{\left\{ \left.\frac{\partial c}{\partial x_{k, 2}}\right\vert_0 \right\}} - 
+    \frac{\left\{ \left.\frac{\partial^2 f}{\partial x_{k, 2}^2}\right\vert_0 - \lambda \left.\frac{\partial^2 c}{\partial x_{2, k}^2}\right\vert_0 \right\} * c(x_{k, 2}^o) }{\left\{ \left.\frac{\partial c}{\partial x_{k, 2}}\right\vert_0 \right\}^2}
   \end{split}
 \end{equation}
 
-Putting this into (10) will give final update rule.
+Putting this into (\ref{eqn:xgradient}) will give final update rule.
+\vspace{0.2cm}
+
+\hrule
+Step 3: Algorithm
+\vspace{0.2cm}
+\hrule
+
+The individual components for (\ref{eqn:xgradient}) are derived as follows:
+
+\begin{align}
+\label{eqn:ind1}
+\left\{ \left.\frac{\partial f}{\partial x_{k, 2}}\right\vert_0 \right\}& 
+  \begin{aligned}[t]
+      &= \left\{ \left.\frac{\partial \left[\pi_i(x_{\{k,2\}}, \hat{\beta})\rho(x_{\{k,2\}}, x_{\{k,4\}}) \right] }{\partial x_{k, 2}}\right\vert_0 \right\}\\ 
+      &= \left\{ \left.\frac{\partial \left[\pi_i(x_{\{k,2\}}, \hat{\beta})\right]}{\partial x_{k, 2}} \rho(x_{\{k,2\}}, x_{\{k,4\}}) + \pi_i(x_{\{k,2\}}, \hat{\beta}) \frac{\partial \left[\rho(x_{\{k,2\}}, x_{\{k,4\}}) \right] }{\partial x_{k, 2}} \right\vert_0 \right\}\\
+      &= \left\{ \left. \hat{\beta}_2 exp\{-z_k\}\left[\hat{\sigma}(z_k)\right]^2*\rho(x_{\{k,2\}}, x_{\{k,4\}}) + \pi_i(x_{\{k,2\}}, \hat{\beta})   \right\vert_0 \right\}
+  \end{aligned}
+\end{align}
+
+
+\begin{align}
+\label{eqn:ind2}
+\left\{ \left.\frac{\partial^2 f}{\partial x_{k, 2}^2}\right\vert_0 \right\}& 
+  \begin{aligned}[t]
+      &= \left\{ \left.  \frac{\partial}{\partial x_{k, 2}} \left[ \hat{\beta}_2 exp\{-z_k\}\hat{\sigma}(z_k)*\rho(x_{\{k,2\}}, x_{\{k,4\}}) + \pi_i(x_{\{k,2\}}, \hat{\beta}) \right]   \right\vert_0 \right\}\\
+      &= \left(-\hat{\beta}_2^2 exp\{ -z_k \} * \left[ \hat{\sigma}(z_k) \right]^2 +  2\hat{\beta}_2^2 \left[exp\{ -z_k \}\right]^2 * \left[ \hat{\sigma}(z_k) \right]^3\right)*\rho(x_{\{k,2\}}, x_{\{k,4\}}) + \\
+      &+ \hat{\beta}_2 exp\{ -z_k \}\left[ \hat{\sigma}(z_k) \right]^2 + \hat{\beta}_2 exp\{ -z_k \}\left[\hat{\sigma}(z_k)\right]^2 \lvert_0\\
+  \end{aligned}
+\end{align}
+
+
+\begin{align}
+\label{eqn:ind3}
+\left\{ \left.\frac{\partial c}{\partial x_{k, 2}}\right\vert_0 \right\}& 
+  \begin{aligned}[t]
+      &= \left\{ \left.\frac{\partial \left[  \sum_{i=1}^{s} \left[ \pi_i(x_{\{k,2\}}, \hat{\beta})*x_{k, 3} \right]  - B \right] }{\partial x_{k, 2}}\right\vert_0 \right\}\\ 
+      &= \left\{ \left. \sum_{i=1}^{s} \hat{\beta}_2 exp\{ -z_k \}\left[\pi_i(x_{\{k,2\}}, \hat{\beta})\right]^2*x_{k, 3} \right\vert_0 \right\}
+  \end{aligned}
+\end{align}
+
+\begin{align}
+\label{eqn:ind4}
+\left\{ \left.\frac{\partial^2 c}{\partial x_{k, 2}^2}\right\vert_0 \right\}& 
+  \begin{aligned}[t]
+      &= \left\{ \left. \sum_{i=1}^{s} \hat{\beta}_2 \frac{\partial exp\{ -z_k \} }{\partial x_{k, 2}} * \left[\pi_i(x_{\{k,2\}}, \hat{\beta})\right]^2 * x_{k, 3} + \hat{\beta}_2  exp\{ -z_k \} * \frac{\partial}{\partial x_{k, 2}} \left[\pi_i(x_{\{k,2\}}, \hat{\beta})\right]^2*x_{k, 3}  \right\vert_0 \right\}\\
+      &= \left\{ \left. \sum_{i=1}^{s} -\hat{\beta}_2^2 exp\{ -z_k \}  * \left[\pi_i(x_{\{k,2\}}, \hat{\beta})\right]^2 * x_{k, 3} + 2\hat{\beta}_2^2  exp\{ -2z_k \} * \left[\pi_i(x_{\{k,2\}}, \hat{\beta})\right]^3*x_{k, 3}  \right\vert_0 \right\}
+  \end{aligned}
+\end{align}
+
+We can now optimize as follows:
+
+\hrule
+\hrule
+
+\textbf{Input:} $\hat{\beta}^*_0, \hat{\beta}_2$ the estimated coefficients from the logistic model.
+
+\textbf{Output:} $x_{\{k, 2\}}$ the optimized price variable.
+
+-1 Initialize points $x_{\{k, 2\}}^o$ and $\lambda^o$.
+
+-2 Whiles not (\ref{eqn:optcond}) do:
+
+-\hspace{1cm} Compute (\ref{eqn:ind1}), (\ref{eqn:ind2}), (\ref{eqn:ind3}) and (\ref{eqn:ind4}).
+
+-\hspace{1cm} Obtain a new $x_{\{k, 2\}}$ using (\ref{eqn:xgradient}) and (\ref{eqn:lambdagradient}).
+
+\hrule
+\hrule
+
+
+\hrule
+Step 4: Implementation
+\vspace{0.2cm}
+\hrule
+
+
+```{r}
+# Initialize the price variables for the three segments:
+x21 <- mean((data.sim %>% filter(x1=="s1"))$x2)
+x22 <- mean((data.sim %>% filter(x1=="s2"))$x2)
+x23 <- mean((data.sim %>% filter(x1=="s3"))$x2)
+x31 <- mean((data.sim %>% filter(x1=="s1"))$x3)
+x32 <- mean((data.sim %>% filter(x1=="s2"))$x3)
+x33 <- mean((data.sim %>% filter(x1=="s3"))$x3)
+# Initialize the lambda
+lambda <- 0.2
+```
+
+
+```{r}
+K <- 100
+loan_amount_vector <- c(B, B, B)
+booking_cost <- 10
+variables_vector <- c(1, 0, 0, x21)
+coefficients_vector <- c(seg1.intercept, coef2, coef3, price.coef)
+```
+
+Build the utility functions here
+
+```{r}
+
+# Function to compute the exponent of the linear form:
+compute_exp_lin_form <- function(variables_vector, coefficients_vector){
+  # compute the linear form
+  ln.form <- variables_vector*coefficients_vector
+  return(exp(-sum(ln.form)))
+}
+
+# Unit test
+print(compute_exp_lin_form(variables_vector, coefficients_vector))
+```
+
+
+
+```{r}
+# Function to compute the estimated predicted probabilities:
+compute_sigma_hat <- function(variables_vector, coefficients_vector){
+  # compute the linear form
+  ln.form <- variables_vector*coefficients_vector
+  return <- (1 + compute_exp_lin_form(variables_vector, coefficients_vector) )^(-1)
+}
+# Unit test
+print(compute_sigma_hat(variables_vector, coefficients_vector))
+```
+
+
+```{r}
+# Function to compute the 1st partial derivative of f w.r.t. the price: (15)
+compute_first_pd_of_f <- function(booking_cost, variables_vector, coefficients_vector){
+  # first compute sigma of z-k using (1)
+  price_coefficient  = coefficients_vector[4] # it's assumed this is in the third place
+  lin_form <- compute_exp_lin_form(variables_vector, coefficients_vector)
+  sigma_value <- compute_sigma_hat(variables_vector, coefficients_vector)
+  # Implement the equation corresponding to (15)
+  return_value <- (price_coefficient*lin_form*(sigma_value^2)*
+                     (variables_vector[4] - booking_cost)) + sigma_value
+  #print(variables_vector)
+  #print(paste("New First PD of f in CFPDF: ", return_value))
+  return(return_value)
+}
+compute_first_pd_of_f(booking_cost, variables_vector, coefficients_vector)
+```
+
+
+```{r}
+# Function to compute the 2nd partial derivative of f w.r.t. the price: (16)
+compute_second_pd_of_f <- function(booking_cost, variables_vector, coefficients_vector){
+  # first compute sigma of z-k using (1)
+  price_coefficient  = coefficients_vector[4] # it's assumed this is in the third place
+  lin_form <- compute_exp_lin_form(variables_vector, coefficients_vector)
+  sigma_value <- compute_sigma_hat(variables_vector, coefficients_vector)
+  # Implement the equation corresponding to (16)
+  first_half <- ( ((-price_coefficient^2)*lin_form*sigma_value^2) + 
+                    (2*(price_coefficient^2)*(lin_form^2)*(sigma_value^3)) 
+                  )*(variables_vector[4] - booking_cost)
+  second_half <- (price_coefficient*lin_form*sigma_value^2
+                  )+(price_coefficient*lin_form*(sigma_value^2))
+
+  return_value <- first_half + second_half
+  #print(paste("New Second PD of f in CSPDF: ", return_value))
+  return(return_value)
+}
+
+# Function to compute the 1st partial derivative of c w.r.t. the price: (17)
+compute_first_pd_of_c <- function(loan_amount_vector, variables_vector, 
+                                  coefficients_vector){
+  # first compute sigma of z-k using (1)
+  price_coefficient  = coefficients_vector[4] # it's assumed this is in the third place
+  # first do for segment 1
+  var_vec1 = variables_vector
+  # set the two variables after the intercept to zero
+  var_vec1[2] = 0; var_vec1[3] = 0
+  lin_f1 <- compute_exp_lin_form(var_vec1, coefficients_vector)
+  sigma_v1 <- compute_sigma_hat(var_vec1, coefficients_vector)
+  seg1 <- (price_coefficient*lin_f1*(sigma_v1)^2)*loan_amount_vector[1]
+  # first do for segment 2
+  var_vec2 = variables_vector
+  # set the third to zero
+  var_vec2[3] = 0
+  lin_f2 <- compute_exp_lin_form(var_vec2, coefficients_vector)
+  sigma_v2 <- compute_sigma_hat(var_vec2, coefficients_vector)
+  seg2 <- (price_coefficient*lin_f2*(sigma_v2)^2)*loan_amount_vector[2]
+  # first do for segment 1
+  var_vec3 = variables_vector
+  # set the second to zero
+  var_vec3[2] = 0
+  lin_f3 <- compute_exp_lin_form(var_vec3, coefficients_vector)
+  sigma_v3 <- compute_sigma_hat(var_vec3, coefficients_vector)
+  seg3 <- (price_coefficient*lin_f1*(sigma_v3)^2)*loan_amount_vector[3]
+  
+  # Implement the equation corresponding to (15)
+  return_value <- seg1 + seg2 + seg3
+  #print(paste("New PD of C in CFPDC: ", return_value))
+  return(return_value)
+}
+
+# Function to compute the 1st partial derivative of c w.r.t. the price: (17)
+compute_second_pd_of_c <- function(loan_amount_vector, variables_vector, 
+                                  coefficients_vector){
+  # first compute sigma of z-k using (1)
+  price_coefficient  = coefficients_vector[4] # it's assumed this is in the third place
+  # first do for segment 1
+  var_vec1 = variables_vector
+  # set the two variables after the intercept to zero
+  var_vec1[2] = 0; var_vec1[3] = 0
+  lin_f1 <- compute_exp_lin_form(var_vec1, coefficients_vector)
+  sigma_v1 <- compute_sigma_hat(var_vec1, coefficients_vector)
+  seg1 <- (
+    (-price_coefficient^2)*lin_f1*(sigma_v1)^2)*loan_amount_vector[1] + 
+    ( 2*(price_coefficient^2)*(lin_f1^2)*(sigma_v1^2)*loan_amount_vector[1]  )
+  # first do for segment 2
+  var_vec2 = variables_vector
+  # set the third to zero
+  var_vec2[3] = 0
+  lin_f2 <- compute_exp_lin_form(var_vec2, coefficients_vector)
+  sigma_v2 <- compute_sigma_hat(var_vec2, coefficients_vector)
+  seg2 <-  (
+    (-price_coefficient^2)*lin_f2*(sigma_v2)^2)*loan_amount_vector[2] + 
+    ( 2*(price_coefficient^2)*(lin_f2^2)*(sigma_v2^2)*loan_amount_vector[2]  )
+  # first do for segment 1
+  var_vec3 = variables_vector
+  # set the second to zero
+  var_vec3[2] = 0
+  lin_f3 <- compute_exp_lin_form(var_vec3, coefficients_vector)
+  sigma_v3 <- compute_sigma_hat(var_vec3, coefficients_vector)
+  seg3 <-  (
+    (-price_coefficient^2)*lin_f3*(sigma_v3)^2)*loan_amount_vector[3] + 
+    ( 2*(price_coefficient^2)*(lin_f3^2)*(sigma_v3^2)*loan_amount_vector[3]  )
+  
+  # Implement the equation corresponding to (15)
+  return_value <- seg1 + seg2 + seg3
+  #print(paste("New PD of C in CFPDC: ", return_value))
+  return(return_value)
+}
+
+compute_c <- function(loan_amount_vector, variables_vector, coefficients_vector, B){
+  # first compute sigma of z-k using (1)
+  price_coefficient  = coefficients_vector[4] # it's assumed this is in the third place
+  # first do for segment 1
+  var_vec1 = variables_vector
+  # set the two variables after the intercept to zero
+  var_vec1[2] = 0; var_vec1[3] = 0
+  sigma_v1 <- compute_sigma_hat(var_vec1, coefficients_vector)
+  seg1 <- (sigma_v1)*loan_amount_vector[1]
+  # first do for segment 2
+  var_vec2 = variables_vector
+  # set the two variables after the intercept to zero
+  var_vec2[2] = 0; var_vec2[3] = 0
+  sigma_v2 <- compute_sigma_hat(var_vec2, coefficients_vector)
+  seg2 <- sigma_v2*loan_amount_vector[2]
+  # first do for segment 1
+  var_vec3 = variables_vector
+  # set the two variables after the intercept to zero
+  var_vec3[2] = 0; var_vec3[3] = 0
+  sigma_v3 <- compute_sigma_hat(var_vec3, coefficients_vector)
+  seg3 <- (sigma_v3)*loan_amount_vector[3]
+  
+  # Implement the equation corresponding to (15)
+  return_value <- seg1 + seg2 + seg3 - B
+  #print(variables_vector)
+  #print(paste("Computed C in CC: ", return_value))
+  return(return_value)
+}
+```
+
+
+
+
+```{r}
+# Function to compute the new lambda
+compute_new_lambda <- function(loan_amount_vector, booking_cost, 
+                               variables_vector, coefficients_vector, B){
+  price_var = variables_vector[4]
+  first_half = ( 
+    compute_first_pd_of_f(
+    booking_cost, variables_vector,coefficients_vector
+    ) )/compute_first_pd_of_c(loan_amount_vector, variables_vector, coefficients_vector)
+  second_half = ( 
+    ( 
+      compute_second_pd_of_f(
+      booking_cost, variables_vector, coefficients_vector
+      ) - compute_second_pd_of_c(loan_amount_vector, variables_vector, coefficients_vector) 
+    )*compute_c(
+        loan_amount_vector, variables_vector, coefficients_vector, B
+        ) )/( 
+          compute_first_pd_of_c(loan_amount_vector, variables_vector, coefficients_vector
+                                )^2)
+  return_value = first_half - second_half
+  #print(paste("New Lambda in CNL: ", return_value))
+  return(return_value)
+}
+# Function to compute the new price
+compute_new_price <- function(
+  lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector
+  ){
+  price_var = variables_vector[4]
+  first_half=( 
+  lambda*compute_first_pd_of_c(loan_amount_vector, variables_vector, coefficients_vector) 
+    ) - compute_first_pd_of_f(booking_cost, variables_vector, coefficients_vector)
+  #print(paste("First Half in CNP: ", first_half))
+  second_half=compute_second_pd_of_f(booking_cost, variables_vector, coefficients_vector) - 
+    (lambda * compute_second_pd_of_c(loan_amount_vector, variables_vector, 
+                                  coefficients_vector) )
+  #print(paste("Second Half in CNP: ", second_half))
+  return_value = (first_half/second_half) #+ price_var
+  #print(variables_vector)
+  #print(paste("New Price in CNP: ", return_value))
+  return(return_value)
+}
+
+# Function to check if the minimum has been achieved: (11)
+check_convergence <- function(new_price, lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector){
+  price_var = variables_vector[4]
+  first_half = - ( 
+  lambda*compute_first_pd_of_c(loan_amount_vector, variables_vector, coefficients_vector) 
+    ) + compute_first_pd_of_f(booking_cost, variables_vector, coefficients_vector)
+  #print(paste("First Half in CNP: ", first_half))
+  second_half=compute_second_pd_of_f(booking_cost, variables_vector, coefficients_vector) - 
+    (lambda * compute_second_pd_of_c(loan_amount_vector, variables_vector, 
+                                  coefficients_vector) )
+  #print(paste("Second Half in CNP: ", second_half)
+  return_value = (first_half) + (new_price-price_var)*second_half
+  return(return_value)
+}
+```
+
+
+
+```{r}
+# Loop to obtain the new values
+data_values_s1 <- data.frame(index = c(1), lambda = c(1), price = c(1), conv = c(1), secp = c(1))
+data_values_s2 <- data.frame(index = c(1), lambda = c(1), price = c(1), conv = c(1), secp = c(1))
+data_values_s3 <- data.frame(index = c(1), lambda = c(1), price = c(1), conv = c(1), secp = c(1))
+
+for (k in 1:K){
+  # Run for segment 1
+  if(variables_vector[2]==0 & variables_vector[3]==0){
+    
+    new_lambda <- compute_new_lambda(loan_amount_vector, booking_cost, 
+                                 variables_vector, coefficients_vector, B)
+    new_x_value <- compute_new_price(new_lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector)
+    conv_value <- check_convergence(new_x_value, lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector)
+    sec_p_of_f <- compute_second_pd_of_f(booking_cost, variables_vector, coefficients_vector)
+    # update the vectors
+    variables_vector[4] <- new_x_value;
+    data_values_s1[k, ] <- c(k, new_lambda, new_x_value, abs(conv_value), sec_p_of_f)
+  }else{
+    print("Wrong configuration of segment 1 variables")
+    break;
+  }
+  # Run for segment 2 by updating the variable vector
+  variables_vector[2] = 1
+  ## check the conditions before running
+  if(variables_vector[2]==1 & variables_vector[3]==0){
+    
+    new_lambda <- compute_new_lambda(loan_amount_vector, booking_cost, 
+                                 variables_vector, coefficients_vector, B)
+    new_x_value <- compute_new_price(new_lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector)
+    conv_value <- check_convergence(new_x_value, lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector)
+    sec_p_of_f <- compute_second_pd_of_f(booking_cost, variables_vector, coefficients_vector)
+    # update the vectors
+    variables_vector[4] <- new_x_value;
+    data_values_s2[k, ] <- c(k, new_lambda, new_x_value, abs(conv_value), sec_p_of_f)
+  }else{
+    print("Wrong configuration of segment 2 variables")
+    break;
+  }
+  
+  # Run for segment 3 by updating the variable vector
+  variables_vector[3] = 1
+  variables_vector[2] = 0
+  ## check the conditions before running
+  if(variables_vector[2]==0 & variables_vector[3]==1){
+    
+    new_lambda <- compute_new_lambda(loan_amount_vector, booking_cost, 
+                                 variables_vector, coefficients_vector, B)
+    new_x_value <- compute_new_price(new_lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector)
+    conv_value <- check_convergence(new_x_value, lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector)
+    sec_p_of_f <- compute_second_pd_of_f(booking_cost, variables_vector, coefficients_vector)
+    # update the vectors
+    variables_vector[4] <- new_x_value;
+    data_values_s3[k, ] <- c(k, new_lambda, new_x_value, abs(conv_value), sec_p_of_f)
+  }else{
+    print("Wrong configuration of segment 3 variables")
+    break;
+  }
+  # Reset to segment 1
+  variables_vector[3] = 0
+  variables_vector[2] = 0
+  
+}
+```
+
+
+
+```{r}
+data_values_s1 <- data_values_s1 %>% mutate(segment = factor(rep(1, K)))
+data_values_s2 <- data_values_s2 %>% mutate(segment = factor(rep(2, K)))
+data_values_s3 <- data_values_s3 %>% mutate(segment = factor(rep(3, K)))
+head(data_values_s1)
+```
+
+```{r}
+merged_data_values <- rbind(data_values_s1, data_values_s2, data_values_s3)
+head(merged_data_values)
+```
+
+
+```{r}
+library(ggplot2)
+ggplot(data = merged_data_values) + geom_line(aes(x = index, y = price, color = segment)) 
+```
+
+
+```{r}
+ggplot(data = merged_data_values) + geom_line(aes(x = index, y = lambda, color = segment))
+```
+
+
+
+```{r}
+ggplot(data = merged_data_values) + geom_line(aes(x = index, y = secp, color = segment))
+```
+
+
+
+
+
+
+
 
 
 
