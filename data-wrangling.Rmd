@@ -1,0 +1,65 @@
+---
+title: "Data Wrangling"
+author: "Sixtus Dakurah"
+date: "7/11/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+```
+
+
+
+```{r}
+my_data <- read_excel("data/data-set.xlsx")
+```
+
+
+
+```{r}
+head(my_data)
+```
+
+```{r}
+# get the group count
+my_data %>% group_by(Segment) %>% summarise(n = n(), mean = mean(Requested_Amount), max = max(Requested_Amount), min = min(Requested_Amount))
+
+ggplot(data = my_data) + geom_line(aes(x = ID, y = Requested_Amount, color = Segment))
+```
+
+
+```{r}
+# construct the data
+# Set loan amount: Requested_Amount
+# Set ground truth: Disbursed
+# Compute the price based on the APR and duration
+
+SIAL <- function(loan, duration, interest){
+  # duration is in months
+  interest = (interest/100)
+  a = loan*(1 + interest/12 )^(duration)
+  b = ( (1 + (interest/12))^duration  - 1)/(interest/12)
+  monthly_payment = a/b
+  total_interest = monthly_payment*duration - loan
+  return(total_interest)
+}
+
+clean_data <- my_data %>% 
+  select(ID, Requested_Amount, Disbursed, Loan_Term, IRR, Segment) %>%
+  drop_na() %>% rename(y = Disbursed, Loan = Requested_Amount, APR = IRR, Duration = Loan_Term) %>%
+  mutate(Price = SIAL(Loan, Duration, APR))
+  
+clean_data
+write_csv(clean_data, file = "data/clean_transformed_data_07_20.csv")
+```
+
+
+
+
+
