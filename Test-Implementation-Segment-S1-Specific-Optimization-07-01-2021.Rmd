@@ -1,5 +1,5 @@
 ---
-title: "Test-Implementation-Segment-Specific-05-31-2021"
+title: "Test-Implementation-Segment-A3-Specific"
 author: "Sixtus Dakurah"
 date: "07/01/2021"
 header-includes:
@@ -51,27 +51,33 @@ We now build a logistic model using the data from segment 1
 
 ```{r}
 # load data
-data.sim <- read_csv("data/clean_transformed_data_07_20.csv")
-head(data.sim)
+my_data <- read_csv("data/clean_transformed_data_07_20.csv")
+head(my_data)
+data.sim <- my_data %>% mutate(y = case_when(y=="No" ~ 0, y=="Yes"~1)) %>%
+  rename(x1 = Cluster, x2 = Price, x3 = Loan, x4 = Cost, x5 = Age, x6= Rating) %>% mutate(x1 = as.factor(x1))
+my_data %>% group_by(Segment) %>% summarise(n = n(), mean = mean(Loan), max = max(Loan), min = min(Loan))
 ```
 
 
 
 ```{r}
-# <- data.sim %>% filter(x1 == 's1')
+segment1 <- "1"
+data.sim <- data.sim %>% filter(x1 == segment1)
 #glm.segment1.fit <- glm(y~x1 + x2 + x3 + I(x1*x2) + 
 #I(x1*x3), data = data.segment1, family = binomial)
-#glm.segment1.fit <- glm(y~x1 + x2, data = data.sim, family = binomial)
-#summary(glm.segment1.fit)
+glm.segment1.fit <- glm(y~x2 + x5 + x6, data = data.sim, family = binomial)
+summary(glm.segment1.fit)
 ```
 
 
 Extract the coefficients:
 
 ```{r}
-#seg1.intercept <- ((glm.segment1.fit)$coefficients)[[1]]
-#coef2 <- ((glm.segment1.fit)$coefficients)[[2]]
-#coef3 <- ((glm.segment1.fit)$coefficients)[[3]]
+seg1.intercept <- ((glm.segment1.fit)$coefficients)[[1]]
+coef2 <- ((glm.segment1.fit)$coefficients)[[2]]
+coef3 <- 0#((glm.segment1.fit)$coefficients)[[3]]
+coef4 <- ((glm.segment1.fit)$coefficients)[[3]]
+coef5 <- ((glm.segment1.fit)$coefficients)[[4]]
 #seg2.intercept <- seg1.intercept +  ((glm.segment1.fit)$coefficients)[[2]]
 #seg3.intercept <- seg1.intercept +  ((glm.segment1.fit)$coefficients)[[3]]
 #price.coef <- ((glm.segment1.fit)$coefficients)[[4]]
@@ -88,15 +94,15 @@ $\pi(x_2, \hat{\beta}) = \left[ \hat{\sigma}(z_1), ..., \hat{\sigma}(z_k) \right
 
 ```{r}
 # get the predictions
-#segment1.pred.probs <- predict(glm.segment1.fit, type = "response")
-#data.sim <- data.sim %>% 
-#  mutate(pred.probs = segment1.pred.probs, 
-#         pred.y = as.factor(ifelse(pred.probs > 0.5, 's', 'f')))
-#head(data.sim)
+segment1.pred.probs <- predict(glm.segment1.fit, type = "response")
+data.sim <- data.sim %>% 
+  mutate(pred.probs = segment1.pred.probs, 
+         pred.y = as.factor(ifelse(pred.probs > 0.5, 's', 'f')))
+head(data.sim)
 ```
 
 ```{r}
-#table(data.sim$pred.y, data.sim$y)
+table(data.sim$pred.y, data.sim$y)
 ```
 
 
@@ -107,8 +113,7 @@ Step 2: We now optimize over the price variable.
 
 ```{r}
 # Compute the total amount available for disbursement
-#(B <- sum(data.sim$x3)) # this will now be the average loan amount.
-#B <- 100
+(B <- data.sim %>% filter(x1==segment1) %>% pull(x3) %>% mean()) # this will now be the average loan amount.0
 ```
 
 Denote the profit as:
@@ -337,23 +342,25 @@ Step 4: Implementation
 
 ```{r}
 # Initialize the price variables for the three segments:
-#x21 <- mean((data.sim %>% filter(x1=="s1"))$x2)
-#x22 <- mean((data.sim %>% filter(x1=="s2"))$x2)
+init.price <- 0#mean((data.sim %>% filter(x1==segment1))$x2)
+init.loan <- median((data.sim %>% filter(x1==segment1))$x3)
+init.age <- median((data.sim %>% filter(x1==segment1))$x5)
+init.rating <- median((data.sim %>% filter(x1==segment1))$x6)
 #x23 <- mean((data.sim %>% filter(x1=="s3"))$x2)
 #x31 <- mean((data.sim %>% filter(x1=="s1"))$x3)
 #x32 <- mean((data.sim %>% filter(x1=="s2"))$x3)
 #x33 <- mean((data.sim %>% filter(x1=="s3"))$x3)
 # Initialize the lambda
-#lambda <- 0.2
+lambda <- 0.4
 ```
 
 
 ```{r}
-#K <- 20
-#loan_amount_vector <- c(B, B, B)
-#booking_cost <- 10
-#variables_vector <- c(1, 0, 0, x21)
-#coefficients_vector <- c(seg1.intercept, coef2, coef3, price.coef)
+K <- 20
+loan_amount_vector <- c(B)
+booking_cost <- mean((data.sim %>% filter(x1==segment1))$x4)
+variables_vector <- c(1, init.price, init.loan, init.age, init.rating)
+coefficients_vector <- c(seg1.intercept, coef2, coef3, coef4, coef5)
 ```
 
 Define the price indexes
@@ -377,7 +384,7 @@ compute_exp_lin_form <- function(variables_vector, coefficients_vector){
 }
 
 # Unit test
-#print(compute_exp_lin_form(variables_vector, coefficients_vector))
+print(compute_exp_lin_form(variables_vector, coefficients_vector))
 ```
 
 
@@ -390,7 +397,7 @@ compute_sigma_hat <- function(variables_vector, coefficients_vector){
   return <- (1 + compute_exp_lin_form(variables_vector, coefficients_vector) )^(-1)
 }
 # Unit test
-#print(compute_sigma_hat(variables_vector, coefficients_vector))
+print(compute_sigma_hat(variables_vector, coefficients_vector))
 ```
 
 
@@ -408,7 +415,7 @@ compute_first_pd_of_f <- function(booking_cost, variables_vector, coefficients_v
   #print(paste("New First PD of f in CFPDF: ", return_value))
   return(return_value)
 }
-#compute_first_pd_of_f(booking_cost, variables_vector, coefficients_vector)
+compute_first_pd_of_f(booking_cost, variables_vector, coefficients_vector)
 ```
 
 
@@ -544,15 +551,13 @@ check_convergence <- function(new_price, lambda, loan_amount_vector, booking_cos
 
 
 
-```{r include=FALSE, echo=FALSE, eval=FALSE}
+```{r}
 # Loop to obtain the new values
 data_values_s1 <- data.frame(index = c(1), lambda = c(1), price = c(1), conv = c(1), secp = c(1))
-data_values_s2 <- data.frame(index = c(1), lambda = c(1), price = c(1), conv = c(1), secp = c(1))
-data_values_s3 <- data.frame(index = c(1), lambda = c(1), price = c(1), conv = c(1), secp = c(1))
+#data_values_s2 <- data.frame(index = c(1), lambda = c(1), price = c(1), conv = c(1), secp = c(1))
+#data_values_s3 <- data.frame(index = c(1), lambda = c(1), price = c(1), conv = c(1), secp = c(1))
 
 for (k in 1:K){
-  # Run for segment 1
-  if(variables_vector[2]==0 & variables_vector[3]==0){
     
     new_lambda <- compute_new_lambda(loan_amount_vector, booking_cost, 
                                  variables_vector, coefficients_vector, B)
@@ -560,73 +565,27 @@ for (k in 1:K){
     conv_value <- check_convergence(new_x_value, lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector)
     sec_p_of_f <- compute_second_pd_of_f(booking_cost, variables_vector, coefficients_vector)
     # update the vectors
-    variables_vector[4] <- new_x_value;
+    variables_vector[PRICE_INDEX] <- new_x_value;
     data_values_s1[k, ] <- c(k, new_lambda, new_x_value, abs(conv_value), sec_p_of_f)
-  }else{
-    print("Wrong configuration of segment 1 variables")
-    break;
-  }
-  # Run for segment 2 by updating the variable vector
-  variables_vector[2] = 1
-  ## check the conditions before running
-  if(variables_vector[2]==1 & variables_vector[3]==0){
-    
-    new_lambda <- compute_new_lambda(loan_amount_vector, booking_cost, 
-                                 variables_vector, coefficients_vector, B)
-    new_x_value <- compute_new_price(new_lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector)
-    conv_value <- check_convergence(new_x_value, lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector)
-    sec_p_of_f <- compute_second_pd_of_f(booking_cost, variables_vector, coefficients_vector)
-    # update the vectors
-    variables_vector[4] <- new_x_value;
-    data_values_s2[k, ] <- c(k, new_lambda, new_x_value, abs(conv_value), sec_p_of_f)
-  }else{
-    print("Wrong configuration of segment 2 variables")
-    break;
-  }
-  
-  # Run for segment 3 by updating the variable vector
-  variables_vector[3] = 1
-  variables_vector[2] = 0
-  ## check the conditions before running
-  if(variables_vector[2]==0 & variables_vector[3]==1){
-    
-    new_lambda <- compute_new_lambda(loan_amount_vector, booking_cost, 
-                                 variables_vector, coefficients_vector, B)
-    new_x_value <- compute_new_price(new_lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector)
-    conv_value <- check_convergence(new_x_value, lambda, loan_amount_vector, booking_cost, variables_vector, coefficients_vector)
-    sec_p_of_f <- compute_second_pd_of_f(booking_cost, variables_vector, coefficients_vector)
-    # update the vectors
-    variables_vector[4] <- new_x_value;
-    data_values_s3[k, ] <- c(k, new_lambda, new_x_value, abs(conv_value), sec_p_of_f)
-  }else{
-    print("Wrong configuration of segment 3 variables")
-    break;
-  }
-  # Reset to segment 1
-  variables_vector[3] = 0
-  variables_vector[2] = 0
-  
 }
 ```
 
 
 
 ```{r}
-#data_values_s1 <- data_values_s1 %>% mutate(segment = factor(rep(1, K)))
+data_values_s1 <- data_values_s1 %>% mutate(segment = factor(rep(segment1, K)))
+data_values_s1
+write_csv(data_values_s1, file = "data/opttimized_segment_S2_data_07_20.csv")
 #data_values_s2 <- data_values_s2 %>% mutate(segment = factor(rep(2, K)))
 #data_values_s3 <- data_values_s3 %>% mutate(segment = factor(rep(3, K)))
 #head(data_values_s1)
 ```
 
-```{r}
-#merged_data_values <- rbind(data_values_s1, data_values_s2, data_values_s3)
-#head(merged_data_values)
-```
 
 
 ```{r}
 #library(ggplot2)
-#ggplot(data = merged_data_values) + geom_line(aes(x = index, y = price, color = segment)) 
+ggplot(data = data_values_s1) + geom_line(aes(x = index, y = price, color = segment)) 
 ```
 
 

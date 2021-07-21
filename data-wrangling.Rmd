@@ -12,6 +12,7 @@ library(readxl)
 library(ggplot2)
 library(tidyverse)
 library(dplyr)
+library(factoextra)
 ```
 
 
@@ -39,6 +40,7 @@ ggplot(data = my_data) + geom_line(aes(x = ID, y = Requested_Amount, color = Seg
 # Set loan amount: Requested_Amount
 # Set ground truth: Disbursed
 # Compute the price based on the APR and duration
+# Set the booking cost to be 0.5% of the loan
 
 SIAL <- function(loan, duration, interest){
   # duration is in months
@@ -51,15 +53,35 @@ SIAL <- function(loan, duration, interest){
 }
 
 clean_data <- my_data %>% 
-  select(ID, Requested_Amount, Disbursed, Loan_Term, IRR, Segment) %>%
-  drop_na() %>% rename(y = Disbursed, Loan = Requested_Amount, APR = IRR, Duration = Loan_Term) %>%
-  mutate(Price = SIAL(Loan, Duration, APR))
+  select(ID, Requested_Amount, Disbursed, Loan_Term, IRR, Segment, Age, Gender_Desc, cibil_score, No_Of_Years_In_City) %>%
+  drop_na() %>% rename(y = Disbursed, Loan = Requested_Amount, APR = IRR, Duration = Loan_Term, Gender = Gender_Desc, Rating = cibil_score, ResidLength = No_Of_Years_In_City) %>%
+  mutate(Price = SIAL(Loan, Duration, APR), Cost = 0.005*Loan)
   
-clean_data
+head(clean_data)
+```
+
+### Instead of relying on the provided segments, we perform k-means clustering to get three segments
+
+```{r}
+K <- 3
+clean_data_1 <- clean_data %>% select(Price, Age, Loan, Rating, ResidLength, Cost)  %>% scale()
+head(clean_data_1)
+```
+
+```{r}
+set.seed(1233)
+kmeans.res <- kmeans(clean_data_1, centers = 3, nstart = 25)
+fviz_cluster(kmeans.res, clean_data_1, ellipse.type = "norm")
+```
+
+```{r}
+clean_data <- clean_data %>% mutate(Cluster = kmeans.res$cluster)
 write_csv(clean_data, file = "data/clean_transformed_data_07_20.csv")
 ```
 
-
+```{r}
+ggplot(data = clean_data) + geom_line(aes(x = ID, y = log(Price), color = as.factor(Cluster)))
+```
 
 
 
