@@ -62,6 +62,7 @@ my_data %>% group_by(Segment) %>% summarise(n = n(), mean = mean(Loan), max = ma
 
 ```{r}
 segment1 <- "1"
+(B <- data.sim %>% pull(x3) %>% sum())
 data.sim <- data.sim %>% filter(x1 == segment1)
 #glm.segment1.fit <- glm(y~x1 + x2 + x3 + I(x1*x2) + 
 #I(x1*x3), data = data.segment1, family = binomial)
@@ -113,7 +114,7 @@ Step 2: We now optimize over the price variable.
 
 ```{r}
 # Compute the total amount available for disbursement
-(B <- data.sim %>% filter(x1==segment1) %>% pull(x3) %>% mean()) # this will now be the average loan amount.0
+#(B <- data.sim %>% filter(x1==segment1) %>% pull(x3) %>% sum()) # this will now be the average loan amount.0
 ```
 
 Denote the profit as:
@@ -343,9 +344,9 @@ Step 4: Implementation
 ```{r}
 # Initialize the price variables for the three segments:
 init.price <- 0#mean((data.sim %>% filter(x1==segment1))$x2)
-init.loan <- median((data.sim %>% filter(x1==segment1))$x3)
-init.age <- median((data.sim %>% filter(x1==segment1))$x5)
-init.rating <- median((data.sim %>% filter(x1==segment1))$x6)
+init.loan <- mean((data.sim %>% filter(x1==segment1))$x3)
+init.age <- mean((data.sim %>% filter(x1==segment1))$x5)
+init.rating <- mean((data.sim %>% filter(x1==segment1))$x6)
 #x23 <- mean((data.sim %>% filter(x1=="s3"))$x2)
 #x31 <- mean((data.sim %>% filter(x1=="s1"))$x3)
 #x32 <- mean((data.sim %>% filter(x1=="s2"))$x3)
@@ -575,7 +576,7 @@ for (k in 1:K){
 ```{r}
 data_values_s1 <- data_values_s1 %>% mutate(segment = factor(rep(segment1, K)))
 data_values_s1
-write_csv(data_values_s1, file = "data/opttimized_segment_S2_data_07_20.csv")
+write_csv(data_values_s1, file = "data/opttimized_segment_S1_data_07_20.csv")
 #data_values_s2 <- data_values_s2 %>% mutate(segment = factor(rep(2, K)))
 #data_values_s3 <- data_values_s3 %>% mutate(segment = factor(rep(3, K)))
 #head(data_values_s1)
@@ -584,20 +585,10 @@ write_csv(data_values_s1, file = "data/opttimized_segment_S2_data_07_20.csv")
 
 
 ```{r}
-#library(ggplot2)
-ggplot(data = data_values_s1) + geom_line(aes(x = index, y = price, color = segment)) 
+#library(ggplot2)\
+ggplot(data = data_values_s1, aes(x = index, y = price)) + geom_line()
 ```
 
-
-```{r}
-#ggplot(data = merged_data_values) + geom_line(aes(x = index, y = lambda, color = segment))
-```
-
-
-
-```{r}
-#ggplot(data = merged_data_values) + geom_line(aes(x = index, y = secp, color = segment))
-```
 
 
 

@@ -56,13 +56,14 @@ head(my_data)
 data.sim <- my_data %>% mutate(y = case_when(y=="No" ~ 0, y=="Yes"~1)) %>%
   rename(x1 = Cluster, x2 = Price, x3 = Loan, x4 = Cost, x5 = Age, x6= Rating) %>% mutate(x1 = as.factor(x1)) %>%
   slice_min(x2, n = nrow(my_data)-2)
-my_data %>% group_by(Segment) %>% summarise(n = n(), mean = mean(Loan), max = max(Loan), min = min(Loan))
+my_data %>% group_by(Cluster) %>% summarise(n = n(), mean = mean(Price), max = max(Loan), min = min(Price), median = median(Price))
 ```
 
 
 
 ```{r}
 segment1 <- "3"
+(B <- data.sim %>% pull(x3) %>% sum())
 data.sim <- data.sim %>% filter(x1 == segment1)
 #glm.segment1.fit <- glm(y~x1 + x2 + x3 + I(x1*x2) + 
 #I(x1*x3), data = data.segment1, family = binomial)
@@ -114,7 +115,7 @@ Step 2: We now optimize over the price variable.
 
 ```{r}
 # Compute the total amount available for disbursement
-(B <- data.sim %>% filter(x1==segment1) %>% pull(x3) %>% mean()) # this will now be the average loan amount.0
+#(B <- data.sim %>% filter(x1==segment1) %>% pull(x3) %>% mean()) # this will now be the average loan amount.0
 ```
 
 Denote the profit as:
@@ -344,9 +345,9 @@ Step 4: Implementation
 ```{r}
 # Initialize the price variables for the three segments:
 init.price <- 0#mean((data.sim %>% filter(x1==segment1))$x2)
-init.loan <- median((data.sim %>% filter(x1==segment1))$x3)
-init.age <- median((data.sim %>% filter(x1==segment1))$x5)
-init.rating <- median((data.sim %>% filter(x1==segment1))$x6)
+init.loan <- mean((data.sim %>% filter(x1==segment1))$x3)
+init.age <- mean((data.sim %>% filter(x1==segment1))$x5)
+init.rating <- mean((data.sim %>% filter(x1==segment1))$x6)
 #x23 <- mean((data.sim %>% filter(x1=="s3"))$x2)
 #x31 <- mean((data.sim %>% filter(x1=="s1"))$x3)
 #x32 <- mean((data.sim %>% filter(x1=="s2"))$x3)

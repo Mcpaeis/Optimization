@@ -386,8 +386,8 @@ Step 4: Implementation
 ```{r}
 # Initialize the price variables for the three segments:
 x21 <- 0#min((data.sim %>% filter(x1==segment1))$x2)
-x51 <- mean((data.sim %>% filter(x1==segment1))$x5)
-x61 <- mean((data.sim %>% filter(x1==segment1))$x6)
+x51 <- median((data.sim %>% filter(x1==segment1))$x5)
+x61 <- media((data.sim %>% filter(x1==segment1))$x6)
 x22 <- mean((data.sim %>% filter(x1=="s2"))$x2)
 x23 <- mean((data.sim %>% filter(x1=="s3"))$x2)
 x31 <- mean((data.sim %>% filter(x1==segment1))$x3)

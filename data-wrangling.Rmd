@@ -31,7 +31,12 @@ head(my_data)
 # get the group count
 my_data %>% group_by(Segment) %>% summarise(n = n(), mean = mean(Requested_Amount), max = max(Requested_Amount), min = min(Requested_Amount))
 
-ggplot(data = my_data) + geom_line(aes(x = ID, y = Requested_Amount, color = Segment))
+ggplot(data = my_data) + geom_line(aes(x = ID, y = log(Requested_Amount), color = Segment))
+
+### try removing the outliers
+n_row <- nrow(my_data)
+my_data <- my_data %>% slice_min(Requested_Amount, n = n_row-5) %>% slice_max(Requested_Amount, n = n_row-6)
+ggplot(data = my_data) + geom_line(aes(x = ID, y = log(Requested_Amount), color = Segment))
 ```
 
 
@@ -71,7 +76,7 @@ head(clean_data_1)
 ```{r}
 set.seed(1233)
 kmeans.res <- kmeans(clean_data_1, centers = 3, nstart = 25)
-fviz_cluster(kmeans.res, clean_data_1, ellipse.type = "norm")
+#fviz_cluster(kmeans.res, clean_data_1, ellipse.type = "norm")
 ```
 
 ```{r}
@@ -83,5 +88,194 @@ write_csv(clean_data, file = "data/clean_transformed_data_07_20.csv")
 ggplot(data = clean_data) + geom_line(aes(x = ID, y = log(Price), color = as.factor(Cluster)))
 ```
 
+
+```{r}
+s1 <- read_csv("data/opttimized_segment_S1_data_07_20.csv")
+s2 <- read_csv("data/opttimized_segment_S2_data_07_20.csv") 
+s3 <- read_csv("data/opttimized_segment_S3_data_07_20.csv")
+my_data <- read_csv("data/clean_transformed_data_07_20.csv")
+data.sim <- my_data %>% mutate(y = case_when(y=="No" ~ 0, y=="Yes"~1)) %>%
+  rename(x1 = Cluster, x2 = Price, x3 = Loan, x4 = Cost, x5 = Age, x6= Rating) %>% mutate(x1 = as.factor(x1))
+# Load all thre datasets
+p1 = (s1$price)[nrow(s1)]
+p2 = (s2$price)[nrow(s2)] 
+p3 = (s3$price)[nrow(s3)]
+m1 = mean((data.sim %>% filter(x1=="1"))$x2)
+m2 = mean((data.sim %>% filter(x1=="2"))$x2)
+m3 = mean((data.sim %>% filter(x1=="3"))$x2)
+optim.data <- rbind(s1, s2, s3) %>% 
+  mutate(segment = factor(segment)) %>%
+  mutate(Price.Optim = case_when(segment=="1"~p1, segment=="2"~p2, segment=="3"~p3))
+  2
+optim.data %>% ggplot() + geom_line(aes(x = index, y = price, color = segment)) + 
+  geom_hline(aes(yintercept = Price.Optim, color = segment), linetype="dashed", size = 0.3) 
+```
+
+
+```{r}
+# fit the three models
+segment1 <- "1"
+segment2 <- "2"
+segment3 <- "3"
+#glm.segment1.fit <- glm(y~x1 + x2 + x3 + I(x1*x2) + 
+#I(x1*x3), data = data.segment1, family = binomial)
+glm.segment1.fit <- glm(y~x2 + x5 + x6, data = data.sim %>% filter(x1 == segment1), family = binomial)
+glm.segment2.fit <- glm(y~x2 + x5 + x6, data = data.sim %>% filter(x1 == segment2), family = binomial)
+glm.segment3.fit <- glm(y~x2 + x5 + x6, data = data.sim %>% filter(x1 == segment3), family = binomial)
+new_data1 <- data.sim %>% mutate(x2 = case_when(x1=="1"~p1, x1=="2"~p2, x1=="3"~p3) )
+new_data2 <- data.sim %>% mutate(x2 = case_when(x1=="1"~m1, x1=="2"~m2, x1=="3"~m3) )
+pred.seg1.optim <- predict(glm.segment1.fit, newdata = new_data1 %>% filter(x1 == segment1), type = "response")
+pred.seg1.mean <- predict(glm.segment1.fit, newdata = new_data2 %>% filter(x1 == segment1), type = "response")
+pred.seg2.optim <- predict(glm.segment2.fit, newdata = new_data1 %>% filter(x1 == segment2), type = "response")
+pred.seg2.mean <- predict(glm.segment2.fit, newdata = new_data2 %>% filter(x1 == segment2), type = "response")
+pred.seg3.optim <- predict(glm.segment3.fit, newdata = new_data1 %>% filter(x1 == segment3), type = "response")
+pred.seg3.mean <- predict(glm.segment3.fit, newdata = new_data2 %>% filter(x1 == segment3), type = "response")
+
+# append the predictions
+
+temp_data1 <- new_data1 %>% filter(x1 == segment1) %>% mutate(Pred.Optimized = pred.seg1.optim, Pred.Mean = pred.seg1.mean)
+temp_data2 <- new_data1 %>% filter(x1 == segment2) %>% mutate(Pred.Optimized = pred.seg2.optim, Pred.Mean = pred.seg2.mean)
+temp_data3 <- new_data1 %>% filter(x1 == segment3) %>% mutate(Pred.Optimized = pred.seg3.optim, Pred.Mean = pred.seg3.mean)
+
+merged_data <- rbind(temp_data1, temp_data2, temp_data3)
+
+# now append to the data
+merged_data <- merged_data %>%
+  mutate(Price.Optim = case_when(x1=="1"~p1, x1=="2"~p2, x1=="3"~p3),
+  Price.Mean = case_when(x1=="1"~m1, x1=="2"~m2, x1=="3"~m3),
+  Profit.Optim = Price.Optim - x4,
+  Actual.Profit = x3 - x4,
+  Profit.Mean = Price.Mean - x4,
+  Expected.Loan.Optim = Pred.Optimized*x3, 
+  Expected.Loan.Mean = Pred.Mean*x3
+  )
+merged_data
+```
+
+
+```{r}
+library(reshape2)
+merged_data   %>% rename(segment = x1) %>% group_by(segment) %>%  
+  summarize(
+    loan.optim = sum(Expected.Loan.Optim), 
+    loan.mean = sum(Expected.Loan.Mean),
+    actual.loan   = sum(x3)
+    ) %>% 
+  print() %>%
+  melt(id.vars = 1) %>%
+  ggplot(aes(x = segment, y = value, fill = variable)) + 
+  geom_col(position = "dodge") + 
+  ylab("Loan Amount") + ggtitle("Total (Expected) Loan Amount For Each Segment")
+``` 
+
+
+```{r}
+merged_data   %>% rename(segment = x1) %>%  
+  summarize(
+    index = c(1),
+    loan.optim = sum(Expected.Loan.Optim), 
+    loan.mean = sum(Expected.Loan.Mean),
+    actual.loan   = sum(x3)
+    ) %>% 
+  print() %>%
+  melt(id.vars = 1) %>%
+  ggplot(aes(x = variable, y = value, fill = variable)) + 
+  geom_col(position = "dodge") + xlab("Source") +
+  ylab("Loan Amount") + ggtitle("Total (Expected) Loan Amount to Check Constraints")
+``` 
+
+
+
+```{r}
+merged_data   %>% rename(segment = x1) %>% group_by(segment) %>%  
+  summarize(
+    Profit.Optim = sum(Profit.Optim), 
+    Profit.Mean = sum(Profit.Mean),
+    Actual.Profit = sum(Actual.Profit)
+    ) %>% 
+  print() %>%
+  melt(id.vars = 1) %>%
+  ggplot(aes(x = segment, y = value, fill = variable)) + 
+  geom_col(position = "dodge") + 
+  ylab("Profit") + ggtitle("Total Profit For Each Segment")
+```
+
+```{r}
+# Check the constraints
+merged_data   %>%  
+  summarize(
+    index = c(1),
+    Profit.Optim = sum(Profit.Optim), 
+    Profit.Mean = sum(Profit.Mean),
+    Actual.Profit = sum(Actual.Profit)
+    ) %>% 
+  print() %>%
+  melt(id.vars = 1) %>%
+  ggplot(aes(x = variable, y = value, fill = variable)) + 
+  geom_col(position = "dodge") + 
+  ylab("Profit") + ggtitle("Total Profit For All Segments")
+```
+
+
+
+```{r}
+custom_colors <- c("2" =  "red", "1" =  "blue", "3" = "green")
+merged_data   %>% rename(segment = x1)  %>%
+  ggplot(aes(x = ID, y = log(Profit.Optim), color = segment)) + 
+  geom_line() + 
+  ylab("Profit") + ggtitle("Expected Loan Amount For Each Segment") + 
+  scale_color_manual(name = "segment", values = custom_colors)
+```
+
+
+## Repeat the above process but for those for which loans were actually issued:
+
+
+
+```{r}
+merged_data %>% filter(y==1) %>% rename(segment = x1) %>% group_by(segment) %>%  
+  summarize(
+    loan.optim = sum(Expected.Loan.Optim), 
+    loan.mean = sum(Expected.Loan.Mean),
+    actual.loan   = sum(x3)
+    ) %>% 
+  print() %>%
+  melt(id.vars = 1) %>%
+  ggplot(aes(x = segment, y = value, fill = variable)) + 
+  geom_col(position = "dodge") + 
+  ylab("Loan Amount") + ggtitle("Total (Expected) Loan Amount For Each Segment")
+```
+
+```{r}
+merged_data %>% filter(y==1)  %>% rename(segment = x1) %>% group_by(segment) %>%  
+  summarize(
+    Profit.Optim = sum(Profit.Optim), 
+    Profit.Mean = sum(Profit.Mean),
+    Actual.Profit = sum(Actual.Profit)
+    ) %>% 
+  print() %>%
+  melt(id.vars = 1) %>%
+  ggplot(aes(x = segment, y = value, fill = variable)) + 
+  geom_col(position = "dodge") + 
+  ylab("Profit") + ggtitle("Total Profit For Each Segment")
+```
+
+
+```{r}
+merged_data %>% filter(y==1)   %>% rename(segment = x1) %>%  
+  summarize(
+    index = c(1),
+    loan.optim = sum(Expected.Loan.Optim), 
+    loan.mean = sum(Expected.Loan.Mean),
+    actual.loan   = sum(x3)
+    ) %>% 
+  print() %>%
+  melt(id.vars = 1) %>%
+  ggplot(aes(x = variable, y = value, fill = variable)) + 
+  geom_col(position = "dodge") + xlab("Source") +
+  ylab("Loan Amount") + ggtitle("Total (Expected) Loan Amount to Check Constraints")
+``` 
+
+## Check prediction accuracy
 
 
